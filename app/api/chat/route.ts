@@ -12,7 +12,7 @@ const openrouter = apiKey
       apiKey,
       baseURL: "https://openrouter.ai/api/v1",
       defaultHeaders: {
-        "HTTP-Referer": "http://localhost:3000",
+        "HTTP-Referer": "https://kist-college-ai-campus.vercel.app",
         "X-Title": "KIST AI Campus Assistant",
       },
     })
@@ -20,15 +20,25 @@ const openrouter = apiKey
 
 export async function POST(request: NextRequest) {
   try {
+    // ---------------------------------------------------------
+    // CHECK OPENROUTER API KEY
+    // ---------------------------------------------------------
+
     if (!apiKey || !openrouter) {
+      console.error("OPENROUTER_API_KEY is missing.");
+
       return NextResponse.json(
         {
           error:
-            "OPENROUTER_API_KEY is missing. Check your .env.local file.",
+            "OPENROUTER_API_KEY is missing. Please configure it in Vercel Environment Variables.",
         },
         { status: 500 }
       );
     }
+
+    // ---------------------------------------------------------
+    // READ REQUEST
+    // ---------------------------------------------------------
 
     const body = await request.json();
 
@@ -69,19 +79,10 @@ ${item.content}
         : "No matching verified KIST information was found.";
 
     // ---------------------------------------------------------
-    // OPENROUTER
+    // SYSTEM PROMPT
     // ---------------------------------------------------------
 
-    const completion =
-      await openrouter.chat.completions.create({
-        model,
-        temperature: 0.1,
-        max_tokens: 700,
-
-        messages: [
-          {
-            role: "system",
-            content: `
+    const systemPrompt = `
 You are KIST AI Campus Assistant.
 
 You are an independent prototype for KIST College & SS
@@ -143,7 +144,22 @@ VERIFIED KIST KNOWLEDGE:
 ${knowledgeContext}
 
 END VERIFIED KIST KNOWLEDGE.
-            `.trim(),
+    `.trim();
+
+    // ---------------------------------------------------------
+    // OPENROUTER API REQUEST
+    // ---------------------------------------------------------
+
+    const completion =
+      await openrouter.chat.completions.create({
+        model,
+        temperature: 0.1,
+        max_tokens: 700,
+
+        messages: [
+          {
+            role: "system",
+            content: systemPrompt,
           },
           {
             role: "user",
@@ -152,18 +168,29 @@ END VERIFIED KIST KNOWLEDGE.
         ],
       });
 
+    // ---------------------------------------------------------
+    // GET AI RESPONSE
+    // ---------------------------------------------------------
+
     const answer =
       completion.choices?.[0]?.message?.content;
 
     if (!answer) {
+      console.error(
+        "OpenRouter returned an empty response."
+      );
+
       return NextResponse.json(
         {
-          error:
-            "OpenRouter returned an empty response.",
+          error: "OpenRouter returned an empty response.",
         },
         { status: 502 }
       );
     }
+
+    // ---------------------------------------------------------
+    // SUCCESS RESPONSE
+    // ---------------------------------------------------------
 
     return NextResponse.json({
       answer,
@@ -174,6 +201,10 @@ END VERIFIED KIST KNOWLEDGE.
       })),
     });
   } catch (error: unknown) {
+    // ---------------------------------------------------------
+    // ERROR HANDLING
+    // ---------------------------------------------------------
+
     console.error("OPENROUTER ERROR:", error);
 
     let errorMessage =
